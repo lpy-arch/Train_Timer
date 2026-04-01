@@ -337,6 +337,111 @@ function ImportView({ onBack }) {
   );
 }
 
+// ─── RM Calculator View ───
+const RM_TABLE = [
+  { rm: 1, coeff: 1.000 },
+  { rm: 2, coeff: 0.943 },
+  { rm: 3, coeff: 0.906 },
+  { rm: 4, coeff: 0.881 },
+  { rm: 5, coeff: 0.856 },
+  { rm: 6, coeff: 0.831 },
+  { rm: 7, coeff: 0.807 },
+  { rm: 8, coeff: 0.786 },
+  { rm: 9, coeff: 0.765 },
+  { rm: 10, coeff: 0.744 },
+];
+
+function RMCalculatorView({ onBack }) {
+  const [selectedRM, setSelectedRM] = useState(5);
+  const [weight, setWeight] = useState("");
+
+  const weightNum = parseFloat(weight);
+  const hasResult = !isNaN(weightNum) && weightNum > 0;
+  const selectedCoeff = RM_TABLE.find((r) => r.rm === selectedRM)?.coeff || 1;
+  const estimated1RM = hasResult ? weightNum / selectedCoeff : 0;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#0f0f1a", color: "#fff", fontFamily: "'SF Mono', 'Fira Code', monospace" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        <button onClick={onBack} style={pillBtn}>← 返回</button>
+        <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: 1, color: "rgba(255,255,255,0.6)" }}>RM 换算</span>
+      </div>
+
+      <div style={{ flex: 1, overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* RM selector */}
+        <div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 8 }}>选择 RM</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {RM_TABLE.map((r) => (
+              <button key={r.rm} onClick={() => setSelectedRM(r.rm)} style={{
+                ...pillBtn, padding: "8px 14px", fontSize: 14, minWidth: 44, textAlign: "center",
+                ...(selectedRM === r.rm ? { background: "rgba(78,205,196,0.15)", color: "#4ECDC4", border: "1px solid rgba(78,205,196,0.3)" } : {}),
+              }}>
+                {r.rm}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Weight input */}
+        <div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 8 }}>输入重量 (kg)</div>
+          <input type="number" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="例如 60"
+            style={{
+              width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 10, color: "#fff", padding: 14, fontSize: 16, fontFamily: "inherit", outline: "none", boxSizing: "border-box",
+            }}
+          />
+        </div>
+
+        {/* Result info */}
+        {hasResult && (
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", padding: "4px 0" }}>
+            基于 {selectedRM}RM = {weightNum}kg，推算 1RM ≈ {estimated1RM.toFixed(1)}kg
+          </div>
+        )}
+
+        {/* Conversion table */}
+        {hasResult && (
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, overflow: "hidden" }}>
+            {/* Table header */}
+            <div style={{
+              display: "flex", padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)",
+              fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 700,
+            }}>
+              <span style={{ flex: 1 }}>RM</span>
+              <span style={{ flex: 1, textAlign: "center" }}>系数</span>
+              <span style={{ flex: 1, textAlign: "right" }}>重量 (kg)</span>
+            </div>
+            {/* Table rows */}
+            {RM_TABLE.map((r) => {
+              const w = estimated1RM * r.coeff;
+              const isSelected = r.rm === selectedRM;
+              return (
+                <div key={r.rm} style={{
+                  display: "flex", alignItems: "center", padding: "10px 16px",
+                  borderBottom: "1px solid rgba(255,255,255,0.04)",
+                  background: isSelected ? "rgba(78,205,196,0.08)" : "transparent",
+                }}>
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: isSelected ? 700 : 500, color: isSelected ? "#4ECDC4" : "rgba(255,255,255,0.7)" }}>
+                    {r.rm}RM
+                  </span>
+                  <span style={{ flex: 1, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
+                    {r.coeff.toFixed(3)}
+                  </span>
+                  <span style={{ flex: 1, textAlign: "right", fontSize: 15, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: isSelected ? "#4ECDC4" : "#fff" }}>
+                    {w.toFixed(1)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- Main App ---
 function TrainingTimer() {
   const [options, setOptions] = useState(() => {
@@ -355,6 +460,7 @@ function TrainingTimer() {
   const stopRafRef = useRef(null);
   const [showResult, setShowResult] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showRMCalc, setShowRMCalc] = useState(false);
   const [showMemo, setShowMemo] = useState(false);
   const [memo, setMemo] = useState("");
   const [finalSegments, setFinalSegments] = useState([]);
@@ -432,6 +538,8 @@ function TrainingTimer() {
 
   if (showImport) return <div style={{ height: "100%", fontFamily: "'SF Mono', 'Fira Code', monospace" }}><ImportView onBack={() => setShowImport(false)} /></div>;
 
+  if (showRMCalc) return <div style={{ height: "100%", fontFamily: "'SF Mono', 'Fira Code', monospace" }}><RMCalculatorView onBack={() => setShowRMCalc(false)} /></div>;
+
   if (showResult) {
     return (
       <div style={{ height: "100%", display: "flex", flexDirection: "column", fontFamily: "'SF Mono', 'Fira Code', monospace" }}>
@@ -458,6 +566,7 @@ function TrainingTimer() {
             备忘录
             {hasMemo && <div style={{ position: "absolute", top: -3, right: -3, width: 7, height: 7, borderRadius: "50%", background: "#4ECDC4" }} />}
           </button>
+          <button onClick={() => setShowRMCalc(true)} style={pillBtn}>RM换算</button>
           {!running && <button onClick={() => setShowImport(true)} style={pillBtn}>导入</button>}
           {!running && <button onClick={openEdit} style={pillBtn}>编辑选项</button>}
         </div>
