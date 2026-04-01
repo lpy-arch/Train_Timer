@@ -318,14 +318,14 @@ function ImportView({ onBack }) {
         <button onClick={onBack} style={pillBtn}>← 返回</button>
         <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: 1, color: "rgba(255,255,255,0.6)" }}>导入记录</span>
       </div>
-      <div style={{ flex: 1, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>粘贴之前导出的训练文本记录，生成可视化</div>
+      <div style={{ flex: 1, padding: 16, display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" }}>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", flexShrink: 0 }}>粘贴之前导出的训练文本记录，生成可视化</div>
         <textarea value={inputText} onChange={(e) => setInputText(e.target.value)}
           placeholder={"粘贴文本记录...\n\n格式示例:\n[0s → 1m30s] 热身 (1m30s)\n[1m30s → 5m0s] 训练 (3m30s)"}
-          style={{ flex: 1, width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "#fff", padding: 14, fontSize: 13, fontFamily: "inherit", resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }}
+          style={{ flex: 1, minHeight: 0, width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "#fff", padding: 14, fontSize: 13, fontFamily: "inherit", resize: "none", outline: "none", boxSizing: "border-box", lineHeight: 1.6 }}
         />
-        {error && <div style={{ color: "#FF6B6B", fontSize: 12 }}>{error}</div>}
-        <button onClick={handleParse} style={{ ...pillBtn, padding: "12px 20px", fontSize: 14, textAlign: "center", background: "rgba(78,205,196,0.12)", color: "#4ECDC4", border: "1px solid rgba(78,205,196,0.3)", borderRadius: 12 }}>
+        {error && <div style={{ color: "#FF6B6B", fontSize: 12, flexShrink: 0 }}>{error}</div>}
+        <button onClick={handleParse} style={{ ...pillBtn, flexShrink: 0, padding: "12px 20px", fontSize: 14, textAlign: "center", background: "rgba(78,205,196,0.12)", color: "#4ECDC4", border: "1px solid rgba(78,205,196,0.3)", borderRadius: 12 }}>
           生成可视化
         </button>
       </div>
