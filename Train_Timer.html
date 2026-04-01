@@ -462,6 +462,7 @@ function TrainingTimer() {
   const [showImport, setShowImport] = useState(false);
   const [showRMCalc, setShowRMCalc] = useState(false);
   const [showMemo, setShowMemo] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const [memo, setMemo] = useState("");
   const [finalSegments, setFinalSegments] = useState([]);
   const [finalOptions, setFinalOptions] = useState([]);
@@ -556,19 +557,39 @@ function TrainingTimer() {
       height: "100%", display: "flex", flexDirection: "column",
       background: "#0f0f1a", color: "#fff",
       fontFamily: "'SF Mono', 'Fira Code', monospace",
-      userSelect: "none", WebkitUserSelect: "none", overflow: "hidden",
+      userSelect: "none", WebkitUserSelect: "none", overflow: "auto",
     }}>
       {/* Top bar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: 2, color: "rgba(255,255,255,0.6)" }}>TRAINER</span>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, position: "relative" }}>
           <button onClick={() => setShowMemo(true)} style={{ ...pillBtn, position: "relative" }}>
             备忘录
             {hasMemo && <div style={{ position: "absolute", top: -3, right: -3, width: 7, height: 7, borderRadius: "50%", background: "#4ECDC4" }} />}
           </button>
-          <button onClick={() => setShowRMCalc(true)} style={pillBtn}>RM换算</button>
-          {!running && <button onClick={() => setShowImport(true)} style={pillBtn}>导入</button>}
-          {!running && <button onClick={openEdit} style={pillBtn}>编辑选项</button>}
+          <button onClick={() => setShowMore((v) => !v)} style={{ ...pillBtn, ...(showMore ? { background: "rgba(78,205,196,0.15)", color: "#4ECDC4", border: "1px solid rgba(78,205,196,0.3)" } : {}) }}>
+            更多 {showMore ? "▲" : "▼"}
+          </button>
+          {showMore && (
+            <div style={{
+              position: "absolute", top: "100%", right: 0, marginTop: 6, zIndex: 50,
+              background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10,
+              overflow: "hidden", minWidth: 120,
+            }}>
+              <button onClick={() => { setShowRMCalc(true); setShowMore(false); }}
+                style={{ display: "block", width: "100%", padding: "10px 16px", background: "transparent", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.7)", fontSize: 13, fontFamily: "inherit", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                RM换算
+              </button>
+              {!running && <button onClick={() => { setShowImport(true); setShowMore(false); }}
+                style={{ display: "block", width: "100%", padding: "10px 16px", background: "transparent", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.7)", fontSize: 13, fontFamily: "inherit", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                导入
+              </button>}
+              {!running && <button onClick={() => { openEdit(); setShowMore(false); }}
+                style={{ display: "block", width: "100%", padding: "10px 16px", background: "transparent", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 13, fontFamily: "inherit", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                编辑选项
+              </button>}
+            </div>
+          )}
         </div>
       </div>
 
