@@ -185,17 +185,19 @@ function WeightConverter() {
 
   const totalKg = kg + lb * 0.453592;
 
-  const StepPicker = ({ value, onChange, step, label, unit }) => (
+  const StepPicker = ({ value, onChange, step, label, unit }) => {
+    const max = unit === "kg" ? 100 : 100;
+    return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, alignItems: "center", background: "rgba(255,255,255,0.03)", padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)" }}>
       <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 700 }}>{label}</span>
       <div style={{ display: "flex", alignItems: "center", gap: 15 }}>
         <button onClick={() => onChange(Math.max(0, value - step))} style={circleBtn}>-</button>
         <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}<span style={{ fontSize: 12, marginLeft: 2, opacity: 0.5 }}>{unit}</span></div>
-        <button onClick={() => onChange(value + step)} style={circleBtn}>+</button>
+        <button onClick={() => onChange(Math.min(max, value + step))} style={circleBtn}>+</button>
       </div>
-      <input type="range" min="0" max={unit === "kg" ? 300 : 600} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: "100%", marginTop: 10, accentColor: "#4ECDC4" }} />
+      <input type="range" min="0" max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: "100%", marginTop: 10, accentColor: "#4ECDC4" }} />
     </div>
-  );
+  );};
 
   return (
     <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 20 }}>
@@ -228,7 +230,7 @@ function RMCalculator() {
     { rm: 1, coeff: 1.0 }, { rm: 2, coeff: 0.97 }, { rm: 3, coeff: 0.94 },
     { rm: 4, coeff: 0.92 }, { rm: 5, coeff: 0.89 }, { rm: 6, coeff: 0.86 },
     { rm: 7, coeff: 0.83 }, { rm: 8, coeff: 0.81 }, { rm: 9, coeff: 0.78 },
-    { rm: 10, coeff: 0.75 }, { rm: 12, coeff: 0.71 }, { rm: 15, coeff: 0.65 },
+    { rm: 10, coeff: 0.75 },
   ];
 
   return (
@@ -269,104 +271,48 @@ const inputStyle = {
 
 function MemoView() {
   const [text, setText] = useState(() => localStorage.getItem(KEYS.MEMO) || "");
+  const [toast, setToast] = useState("");
   useEffect(() => { localStorage.setItem(KEYS.MEMO, text); }, [text]);
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2000); };
+
+  const addToRecords = () => {
+    if (!text.trim()) {
+      showToast("备忘录内容为空");
+      return;
+    }
+    const today = new Date();
+    const dateStr = `${pad(today.getFullYear() % 100)}/${pad(today.getMonth() + 1)}/${pad(today.getDate())}`;
+    const newEntry = `### ${dateStr}\n${text.trim()}\n\n`;
+
+    const currentCache = localStorage.getItem(KEYS.CACHE) || "";
+    const newCache = newEntry + currentCache;
+    localStorage.setItem(KEYS.CACHE, newCache);
+    showToast("已添加到训练记录");
+    setText(""); // Clear memo after adding
+  };
+
+  const clearMemo = () => {
+    if (confirm("确定要清空备忘录吗？")) {
+      setText("");
+      showToast("备忘录已清空");
+    }
+  };
+
   return (
-    <div style={{ padding: 16, height: "100%", display: "flex", flexDirection: "column" }}>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="记录训练心得、计划等..."
+    <div style={{ padding: 16, height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="记录训练内容，格式：&#10;动作名称：重量*次数格式&#10;例如：卧推：70*5x5&#10;完成后点击下方"添加到训练记录"按钮"
         style={{ flex: 1, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, color: "#fff", padding: 16, fontSize: 15, fontFamily: "inherit", resize: "none", outline: "none", lineHeight: 1.6 }} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={addToRecords} style={{ ...pillBtn, flex: 1, background: "rgba(78,205,196,0.15)", color: "#4ECDC4", borderColor: "rgba(78,205,196,0.3)", padding: 12, fontSize: 14 }}>添加到训练记录</button>
+        <button onClick={clearMemo} style={{ ...pillBtn, padding: 12, fontSize: 14 }}>清空</button>
+      </div>
+      {toast && <div style={toastStyle}>{toast}</div>}
     </div>
   );
 }
 
-const INITIAL_DATA = `### 26/03/02
-卧推：70*5x5
-硬拉：110*5x5
-前蹲：70*8x4
-划船：70*8x4
-
-### 26/03/04
-实力推：42.5*5x5
-引体：宽握*8887
-背蹲：105*5x4
-罗拉：80*8x4
-
-### 26/03/06
-卧推：65*8x5
-划船：70*8x5
-实力推：38*8886
-引体：对握*8x4
-
-### 26/03/09
-卧推：72.5*5x5
-硬拉：100*5x5
-划船：70*8x5
-背蹲：80*8x4
-
-### 26/03/11
-实力推：42.5*5x5
-引体：宽握*86776
-背蹲：110*55545
-硬拉：80*8x4
-
-### 26/03/13
-卧推：67.5*88876
-划船：70*8x5
-实力推：38*8x5
-引体：对握*8x5
-
-### 26/03/16
-卧推：75*55553
-背蹲：100*8x4
-潘划：70*5x5
-引体：宽握*86867
-
-### 26/03/18
-硬拉：110*5x5
-卧推：67.5*88887
-实力推：44.5*35555
-潘划：60*8x5
-
-### 26/03/20
-背蹲：110*5x5
-硬拉：90*8x4
-引体：宽5*5x5
-实力推：40*88876
-
-### 26/03/30
-背蹲：110*55434
-引体：宽5*5x5
-实力推：40*8867
-
-### 26/04/01
-卧推：75*55544
-潘划：75*8888
-杠二：15*20/15/10/10/10
-窄推：40*12/10/10/10/8
-悬挂：5s*45554
-
-### 26/04/02
-硬拉：120*55444
-实力推：44.5*5x5
-引体：宽*8x4
-
-### 26/04/03
-潘划：80*55555
-卧推：67.5*8887
-杠二：30*88888
-窄推：50*88888
-悬挂：5s*76665
-
-### 26/04/06
-背蹲：110*55555
-引体：宽7.5*45343
-实力推：40*8888
-
-### 26/04/07
-卧推：75*55555
-潘划：60*8888
-杠二：25*88888
-窄推：55*88888
-悬挂：5s*66655`;
+const INITIAL_DATA = ``;
 
 function TrainingRecordsView({ config, setView }) {
   const [rawText, setRawText] = useState(() => localStorage.getItem(KEYS.CACHE) || INITIAL_DATA);
@@ -375,8 +321,27 @@ function TrainingRecordsView({ config, setView }) {
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
 
-  const sessions = useMemo(() => parseTrainingRecords(rawText), [rawText]);
-  
+  const sessions = useMemo(() => {
+    const parsed = parseTrainingRecords(rawText);
+    // Sort: newest date first, then higher total reps first
+    return parsed.sort((a, b) => {
+      // Convert YY/MM/DD to comparable string (20YYMMDD) for correct sorting
+      const parseDate = (dateStr) => {
+        const [y, m, d] = dateStr.split('/');
+        return `20${y}${m}${d}`;
+      };
+      const dateA = parseDate(a.date);
+      const dateB = parseDate(b.date);
+      if (dateA !== dateB) {
+        return dateB.localeCompare(dateA); // descending
+      }
+      // Same date: higher total reps first
+      const totalRepsA = a.exercises.reduce((sum, ex) => sum + ex.reps.reduce((s, r) => s + r, 0), 0);
+      const totalRepsB = b.exercises.reduce((sum, ex) => sum + ex.reps.reduce((s, r) => s + r, 0), 0);
+      return totalRepsB - totalRepsA; // descending
+    });
+  }, [rawText]);
+
   const allExercises = useMemo(() => {
     const map = {};
     sessions.forEach(s => {
@@ -435,7 +400,7 @@ function TrainingRecordsView({ config, setView }) {
       <div style={{ flex: 1, overflow: "auto" }}>
         {mode === "date" && (
           <div style={{ padding: 16 }}>
-            {[...sessions].reverse().map((s, i) => (
+            {sessions.map((s, i) => (
               <div key={i} style={{ marginBottom: 20, background: "rgba(255,255,255,0.02)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
                 <div style={{ padding: "10px 16px", background: "rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between" }}>
                   <span style={{ fontWeight: 700, color: "#4ECDC4" }}>{s.alias ? `${s.alias} ` : ""}{s.date}</span>
@@ -503,7 +468,7 @@ const activePill = { background: "rgba(78,205,196,0.15)", color: "#4ECDC4", bord
 function SettingsView({ initial, onSave, onBack }) {
   const [repo, setRepo] = useState(initial?.repo || "");
   const [token, setToken] = useState(initial?.token || "");
-  const [filePath, setFilePath] = useState(initial?.filePath || "TrainLog.md");
+  const [filePath, setFilePath] = useState(initial?.filePath || "训练记录.md");
 
   return (
     <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 20 }}>
@@ -518,7 +483,7 @@ function SettingsView({ initial, onSave, onBack }) {
       </div>
       <div>
         <div style={labelStyle}>Data File Path</div>
-        <input value={filePath} onChange={(e) => setFilePath(e.target.value)} placeholder="TrainLog.md" style={inputStyle} />
+        <input value={filePath} onChange={(e) => setFilePath(e.target.value)} placeholder="训练记录.md" style={inputStyle} />
       </div>
       <button onClick={() => onSave({ repo, token, filePath })} style={{ ...pillBtn, background: "rgba(78,205,196,0.2)", color: "#4ECDC4", padding: 14 }}>保存配置</button>
       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", lineHeight: 1.6 }}>
