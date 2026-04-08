@@ -7,12 +7,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Trainer">
 <meta name="theme-color" content="#0f0f1a">
-<title>Train Timer</title>
+<title>Trainer Hub</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body, #root { height: 100%; height: 100dvh; width: 100%; overflow: hidden; background: #0f0f1a; color: #fff; }
   body { padding-top: env(safe-area-inset-top); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; }
-
+  
   /* Scrollbar styling */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -61,25 +61,6 @@ const TAB_ICONS = {
   CONV: "🔄",
   MEMO: "📝"
 };
-
-const INITIAL_DATA = `### 26/03/02
-卧推：70*5x5
-硬拉：110*5x5
-前蹲：70*8x4
-划船：70*8x4
-
-### 26/03/04
-实力推：42.5*5x5
-引体：宽握*8887
-背蹲：105*5x4
-罗拉：80*8x4
-
-### 26/03/06
-卧推：65*8x5
-划船：70*8x5
-实力推：38*8886
-引体：对握*8x4
-`;
 
 // --- Utils ---
 const pad = (n) => String(n).padStart(2, "0");
@@ -153,13 +134,13 @@ function parseTrainingRecords(text) {
       if (exMatch) {
         const name = exMatch[1].trim();
         const rawData = exMatch[2].trim();
-
+        
         // Parse reps/sets from rawData
         // Example: 75*55544, 70*5x5, 40*12/10/10/10/8, 宽握*8887
         const parts = rawData.split("*");
         const weight = parts[0].trim();
         const repData = parts[1] ? parts[1].trim() : "";
-
+        
         let reps = [];
         if (repData.includes("x")) {
           const [r, s] = repData.split("x").map(v => parseInt(v));
@@ -172,7 +153,7 @@ function parseTrainingRecords(text) {
           // Special case for numbers > 9? No, the format 55544 implies single digits.
           // If it's something like 10/10/10, it would use / or x.
         }
-
+        
         currentSession.exercises.push({ name, weight, reps, raw: rawData });
       }
     }
@@ -212,7 +193,7 @@ function WeightConverter() {
         <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}<span style={{ fontSize: 12, marginLeft: 2, opacity: 0.5 }}>{unit}</span></div>
         <button onClick={() => onChange(value + step)} style={circleBtn}>+</button>
       </div>
-      <input type="range" min="0" max={unit === "kg" ? 100 : 100} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: "100%", marginTop: 10, accentColor: "#4ECDC4" }} />
+      <input type="range" min="0" max={unit === "kg" ? 300 : 600} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: "100%", marginTop: 10, accentColor: "#4ECDC4" }} />
     </div>
   );
 
@@ -247,7 +228,7 @@ function RMCalculator() {
     { rm: 1, coeff: 1.0 }, { rm: 2, coeff: 0.97 }, { rm: 3, coeff: 0.94 },
     { rm: 4, coeff: 0.92 }, { rm: 5, coeff: 0.89 }, { rm: 6, coeff: 0.86 },
     { rm: 7, coeff: 0.83 }, { rm: 8, coeff: 0.81 }, { rm: 9, coeff: 0.78 },
-    { rm: 10, coeff: 0.75 },
+    { rm: 10, coeff: 0.75 }, { rm: 12, coeff: 0.71 }, { rm: 15, coeff: 0.65 },
   ];
 
   return (
@@ -262,7 +243,7 @@ function RMCalculator() {
           <input type="number" value={reps} onChange={(e) => setReps(e.target.value)} style={inputStyle} />
         </div>
       </div>
-
+      
       {hasResult && (
         <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
           <div style={{ padding: 12, background: "rgba(78,205,196,0.1)", borderBottom: "1px solid rgba(78,205,196,0.2)", textAlign: "center" }}>
@@ -297,41 +278,105 @@ function MemoView() {
   );
 }
 
+const INITIAL_DATA = `### 26/03/02
+卧推：70*5x5
+硬拉：110*5x5
+前蹲：70*8x4
+划船：70*8x4
+
+### 26/03/04
+实力推：42.5*5x5
+引体：宽握*8887
+背蹲：105*5x4
+罗拉：80*8x4
+
+### 26/03/06
+卧推：65*8x5
+划船：70*8x5
+实力推：38*8886
+引体：对握*8x4
+
+### 26/03/09
+卧推：72.5*5x5
+硬拉：100*5x5
+划船：70*8x5
+背蹲：80*8x4
+
+### 26/03/11
+实力推：42.5*5x5
+引体：宽握*86776
+背蹲：110*55545
+硬拉：80*8x4
+
+### 26/03/13
+卧推：67.5*88876
+划船：70*8x5
+实力推：38*8x5
+引体：对握*8x5
+
+### 26/03/16
+卧推：75*55553
+背蹲：100*8x4
+潘划：70*5x5
+引体：宽握*86867
+
+### 26/03/18
+硬拉：110*5x5
+卧推：67.5*88887
+实力推：44.5*35555
+潘划：60*8x5
+
+### 26/03/20
+背蹲：110*5x5
+硬拉：90*8x4
+引体：宽5*5x5
+实力推：40*88876
+
+### 26/03/30
+背蹲：110*55434
+引体：宽5*5x5
+实力推：40*8867
+
+### 26/04/01
+卧推：75*55544
+潘划：75*8888
+杠二：15*20/15/10/10/10
+窄推：40*12/10/10/10/8
+悬挂：5s*45554
+
+### 26/04/02
+硬拉：120*55444
+实力推：44.5*5x5
+引体：宽*8x4
+
+### 26/04/03
+潘划：80*55555
+卧推：67.5*8887
+杠二：30*88888
+窄推：50*88888
+悬挂：5s*76665
+
+### 26/04/06
+背蹲：110*55555
+引体：宽7.5*45343
+实力推：40*8888
+
+### 26/04/07
+卧推：75*55555
+潘划：60*8888
+杠二：25*88888
+窄推：55*88888
+悬挂：5s*66655`;
+
 function TrainingRecordsView({ config, setView }) {
-  const [rawText, setRawText] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [rawText, setRawText] = useState(() => localStorage.getItem(KEYS.CACHE) || INITIAL_DATA);
   const [mode, setMode] = useState("date"); // date | exercise | edit | settings
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
 
-  // Load data on init: try local file first, then localStorage, then initial data
-  useEffect(() => {
-    const cached = localStorage.getItem(KEYS.CACHE);
-
-    // Try to load local 训练记录.md file (from Train_Log approach)
-    fetch('./训练记录.md')
-      .then(res => res.ok ? res.text() : Promise.reject())
-      .then(data => {
-        setRawText(data);
-        localStorage.setItem(KEYS.CACHE, data);
-        setLoading(false);
-        showToast("已加载本地训练记录");
-      })
-      .catch(() => {
-        // Fallback to cache or initial data
-        if (cached) {
-          setRawText(cached);
-        } else {
-          setRawText(INITIAL_DATA);
-          localStorage.setItem(KEYS.CACHE, INITIAL_DATA);
-        }
-        setLoading(false);
-      });
-  }, []);
-
   const sessions = useMemo(() => parseTrainingRecords(rawText), [rawText]);
-
+  
   const allExercises = useMemo(() => {
     const map = {};
     sessions.forEach(s => {
@@ -372,21 +417,7 @@ function TrainingRecordsView({ config, setView }) {
     setSyncing(false);
   };
 
-  // Export to local file
-  const handleExport = () => {
-    const blob = new Blob([rawText], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `训练记录_${new Date().toISOString().slice(0,10)}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast("已导出记录文件");
-  };
-
   const [selectedEx, setSelectedEx] = useState(null);
-
-  if (loading) return <div style={{ padding: 16, color: "rgba(255,255,255,0.5)" }}>正在加载数据...</div>;
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -396,7 +427,6 @@ function TrainingRecordsView({ config, setView }) {
         <button onClick={() => setMode("exercise")} style={{ ...pillBtn, ...(mode === "exercise" ? activePill : {}) }}>动作索引</button>
         <button onClick={() => setMode("edit")} style={{ ...pillBtn, ...(mode === "edit" ? activePill : {}) }}>编辑数据</button>
         <div style={{ flex: 1 }} />
-        <button onClick={handleExport} style={{ ...pillBtn, color: "#95E1D3" }}>导出</button>
         <button onClick={handlePull} disabled={syncing} style={{ ...pillBtn, color: "#4ECDC4" }}>{syncing ? "..." : "同步"}</button>
       </div>
 
@@ -493,8 +523,6 @@ function SettingsView({ initial, onSave, onBack }) {
       <button onClick={() => onSave({ repo, token, filePath })} style={{ ...pillBtn, background: "rgba(78,205,196,0.2)", color: "#4ECDC4", padding: 14 }}>保存配置</button>
       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", lineHeight: 1.6 }}>
         提示：数据将以 Markdown 格式存储在指定的 GitHub 仓库中。请确保 Token 拥有 Contents (Read/Write) 权限。
-        <br/><br/>
-        本地使用说明：将训练记录保存为 训练记录.md 文件放在同目录下，应用会自动加载。
       </div>
     </div>
   );
@@ -537,7 +565,7 @@ function TrainerApp() {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <Header title={showSettings ? "设置" : activeTabName} onMore={activeTab === "RECORDS" ? () => setShowSettings(!showSettings) : null} />
-
+      
       <div style={{ flex: 1, overflow: "hidden" }}>
         {showSettings ? (
           <SettingsView initial={config} onSave={handleSaveConfig} onBack={() => setShowSettings(false)} />
