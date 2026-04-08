@@ -4,30 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Trainer Hub - 训练追踪</title>
-    <script src="https://lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/react/18.2.0/umd/react.production.min.js"></script>
-    <script src="https://lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-    <script src="https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/babel-standalone/6.26.0/babel.min.js"></script>
+    <script src="https://esm.sh/react@18.2.0"></script>
+    <script src="https://esm.sh/react-dom@18.2.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body, #root { height: 100%; height: 100dvh; width: 100%; overflow: hidden; background: #0f0f1a; color: #fff; }
         body { padding-top: env(safe-area-inset-top); font-family: -apple-system, system-ui, sans-serif; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        /* 增加加载占位样式 */
-        #root:empty::before { content: '正在启动训练系统...'; display: flex; align-items: center; justify-content: center; height: 100vh; color: rgba(255,255,255,0.3); font-size: 14px; }
+        #root:empty::before { content: '系统启动中...'; display: flex; align-items: center; justify-content: center; height: 100vh; color: rgba(255,255,255,0.3); }
+        .tab-btn { flex: 1; padding: 15px; background: none; border: none; font-size: 14px; cursor: pointer; transition: 0.3s; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
 <script type="text/babel">
-const { useState, useRef, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo } = React;
 
-// --- 配置与常量 ---
-const STORAGE_PREFIX = "tt_v3_"; // 升级版本号避免旧缓存冲突
-const KEYS = { CONFIG: STORAGE_PREFIX + "config", CACHE: STORAGE_PREFIX + "cache", MEMO: STORAGE_PREFIX + "memo", TAB: STORAGE_PREFIX + "tab" };
+const STORAGE_KEY = "tt_v3_cache";
 
-// --- 修复后的解析逻辑 ---
+// 解析逻辑保持高效
 function parseTrainingRecords(text) {
     if (!text) return [];
     const sessions = [];
@@ -37,10 +33,10 @@ function parseTrainingRecords(text) {
     for (let line of lines) {
         line = line.trim();
         if (!line) continue;
-        const dateMatch = line.match(/^###\s*(\d{2}\/\d{2}\/\d{2})(?:\s*\((.*)\))?/);
+        const dateMatch = line.match(/^###\s*(\d{2}\/\d{2}\/\d{2})/);
         if (dateMatch) {
             if (currentSession) sessions.push(currentSession);
-            currentSession = { date: dateMatch[1], alias: dateMatch[2] || "", exercises: [] };
+            currentSession = { date: dateMatch[1], exercises: [] };
             continue;
         }
         if (currentSession) {
@@ -50,17 +46,8 @@ function parseTrainingRecords(text) {
                 const rawData = exMatch[2].trim();
                 const parts = rawData.split("*");
                 const weight = parts[0] || "0";
-                let reps = [];
-                const repData = parts[1] || "";
-                
-                if (repData.includes("x")) {
-                    const [r, s] = repData.split("x").map(v => parseInt(v) || 0);
-                    reps = Array(s || 0).fill(r);
-                } else if (repData.includes("/")) {
-                    reps = repData.split("/").map(v => parseInt(v) || 0);
-                } else {
-                    reps = repData.split("").map(v => parseInt(v) || 0);
-                }
+                const repStr = parts[1] || "";
+                let reps = repStr.includes("x") ? Array(parseInt(repStr.split("x")[1]) || 0).fill(repStr.split("x")[0]) : repStr.split(/[\/\s]/);
                 currentSession.exercises.push({ name, weight, reps });
             }
         }
@@ -69,107 +56,70 @@ function parseTrainingRecords(text) {
     return sessions;
 }
 
-// --- 组件部分 (精简修复) ---
-const Header = ({ title, onMore }) => (
-    <div style={{ padding: "16px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ fontSize: "18px", fontWeight: "800" }}>{title}</h2>
-        {onMore && <button onClick={onMore} style={pillBtnStyle}>设置</button>}
-    </div>
-);
-
-const pillBtnStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#fff", padding: "6px 12px", fontSize: "12px" };
-
-// ... (其他 UI 组件如 RMCalculator, WeightConverter 保持原样，但确保数据处理健壮)
-
-function TrainingRecordsView({ config, rawText, setRawText }) {
-    const [mode, setMode] = useState("date");
-    const [selectedEx, setSelectedEx] = useState(null);
-
-    const sessions = useMemo(() => {
-        const parsed = parseTrainingRecords(rawText);
-        return parsed.sort((a, b) => b.date.localeCompare(a.date)); // 简化排序确保稳定性
-    }, [rawText]);
-
-    const allExercises = useMemo(() => {
-        const map = {};
-        sessions.forEach(s => {
-            s.exercises.forEach(ex => {
-                if (!map[ex.name]) map[ex.name] = [];
-                map[ex.name].push({ date: s.date, ...ex });
-            });
-        });
-        return Object.keys(map).map(name => ({ name, history: map[name] }));
-    }, [sessions]);
-
-    return (
-        <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", gap: "8px", padding: "12px 16px" }}>
-                <button onClick={() => setMode("date")} style={{...pillBtnStyle, opacity: mode==="date"?1:0.5}}>时间线</button>
-                <button onClick={() => setMode("exercise")} style={{...pillBtnStyle, opacity: mode==="exercise"?1:0.5}}>动作库</button>
-                <button onClick={() => setMode("edit")} style={{...pillBtnStyle, opacity: mode==="edit"?1:0.5}}>编辑</button>
-            </div>
-            
-            <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 100px" }}>
-                {mode === "date" && sessions.map((s, i) => (
-                    <div key={i} style={{ marginBottom: "16px", background: "rgba(255,255,255,0.03)", padding: "12px", borderRadius: "12px" }}>
-                        <div style={{ color: "#4ECDC4", marginBottom: "8px", fontWeight: "bold" }}>{s.date} {s.alias}</div>
-                        {s.exercises.map((ex, j) => (
-                            <div key={j} style={{ fontSize: "14px", opacity: 0.8 }}>{ex.name}：{ex.weight}kg * {ex.reps.join("/")}</div>
-                        ))}
-                    </div>
-                ))}
-                
-                {mode === "exercise" && (
-                    selectedEx ? (
-                        <div>
-                            <button onClick={() => setSelectedEx(null)} style={{...pillBtnStyle, marginBottom: "12px"}}>返回</button>
-                            <h3>{selectedEx.name}</h3>
-                            {[...selectedEx.history].reverse().map((h, i) => ( // 使用副本反转
-                                <div key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "8px 0" }}>
-                                    {h.date}: {h.weight}kg * {h.reps.join("/")}
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                            {allExercises.map(ex => (
-                                <div key={ex.name} onClick={() => setSelectedEx(ex)} style={{ background: "rgba(255,255,255,0.05)", padding: "12px", borderRadius: "8px" }}>
-                                    {ex.name} ({ex.history.length})
-                                </div>
-                            ))}
-                        </div>
-                    )
-                )}
-
-                {mode === "edit" && (
-                    <textarea 
-                        value={rawText} 
-                        onChange={(e) => { setRawText(e.target.value); localStorage.setItem(KEYS.CACHE, e.target.value); }}
-                        style={{ width: "100%", height: "300px", background: "#000", color: "#4ECDC4", border: "1px solid #333", borderRadius: "8px", padding: "10px" }}
-                    />
-                )}
-            </div>
-        </div>
-    );
-}
-
-// --- 主程序入口 ---
 function App() {
     const [activeTab, setActiveTab] = useState("RECORDS");
-    const [rawText, setRawText] = useState(() => localStorage.getItem(KEYS.CACHE) || "### 26/04/01\n卧推：70*555\n");
+    const [rawText, setRawText] = useState("");
+    const [loading, setLoading] = useState(true);
+
+    // 自动加载逻辑：优先缓存，其次尝试读取同目录的 .md 文件
+    useEffect(() => {
+        const cached = localStorage.getItem(STORAGE_KEY);
+        if (cached) {
+            setRawText(cached);
+            setLoading(false);
+        } else {
+            // 如果没缓存，尝试从服务器/本地拉取 .md
+            fetch('./训练记录.md')
+                .then(res => res.text())
+                .then(data => {
+                    if (data.includes('###')) {
+                        setRawText(data);
+                        localStorage.setItem(STORAGE_KEY, data);
+                    }
+                })
+                .catch(() => console.log("本地模式：请手动粘贴数据"))
+                .finally(() => setLoading(false));
+        }
+    }, []);
+
+    const sessions = useMemo(() => parseTrainingRecords(rawText).sort((a, b) => b.date.localeCompare(a.date)), [rawText]);
+
+    if (loading) return null;
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <Header title="Trainer Hub" />
-            <div style={{ flex: 1, overflow: "hidden" }}>
-                {activeTab === "RECORDS" && <TrainingRecordsView rawText={rawText} setRawText={setRawText} />}
-                {activeTab === "RM" && <div style={{padding:20}}>RM计算器暂未变动</div>}
+            <div style={{ padding: "16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <h2 style={{ fontSize: "18px", fontWeight: "800" }}>Trainer Hub</h2>
             </div>
-            {/* 底部导航 */}
+            
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+                {activeTab === "RECORDS" && (
+                    sessions.map((s, i) => (
+                        <div key={i} style={{ marginBottom: "16px", background: "rgba(255,255,255,0.03)", padding: "12px", borderRadius: "12px" }}>
+                            <div style={{ color: "#4ECDC4", marginBottom: "8px", fontWeight: "bold" }}>{s.date}</div>
+                            {s.exercises.map((ex, j) => (
+                                <div key={j} style={{ fontSize: "14px", opacity: 0.8, marginBottom: "4px" }}>
+                                    {ex.name}：{ex.weight}kg * {Array.isArray(ex.reps) ? ex.reps.join("/") : ex.reps}
+                                </div>
+                            ))}
+                        </div>
+                    ))
+                )}
+                
+                {activeTab === "EDIT" && (
+                    <textarea 
+                        value={rawText} 
+                        onChange={(e) => { setRawText(e.target.value); localStorage.setItem(STORAGE_KEY, e.target.value); }}
+                        style={{ width: "100%", height: "80%", background: "#000", color: "#4ECDC4", border: "1px solid #333", borderRadius: "8px", padding: "10px", fontFamily: "monospace" }}
+                        placeholder="在此粘贴 Markdown 记录..."
+                    />
+                )}
+            </div>
+
             <div style={{ display: "flex", borderTop: "1px solid #222", paddingBottom: "env(safe-area-inset-bottom)" }}>
-                {["RECORDS", "RM", "MEMO"].map(tab => (
-                    <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: "15px", background: "none", border: "none", color: activeTab===tab?"#4ECDC4":"#666" }}>
-                        {tab}
+                {["RECORDS", "EDIT"].map(tab => (
+                    <button key={tab} onClick={() => setActiveTab(tab)} className="tab-btn" style={{ color: activeTab===tab?"#4ECDC4":"#666" }}>
+                        {tab === "RECORDS" ? "查看记录" : "编辑源码"}
                     </button>
                 ))}
             </div>
@@ -177,7 +127,9 @@ function App() {
     );
 }
 
-ReactDOM.render(<App />, document.getElementById("root"));
+// React 18 正确的渲染方式
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
 </script>
 </body>
 </html>
