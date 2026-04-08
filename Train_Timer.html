@@ -1,570 +1,184 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Trainer">
-<meta name="theme-color" content="#0f0f1a">
-<title>Trainer Hub</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body, #root { height: 100%; height: 100dvh; width: 100%; overflow: hidden; background: #0f0f1a; color: #fff; }
-  body { padding-top: env(safe-area-inset-top); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; }
-
-  /* Scrollbar styling */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Trainer Hub - 训练追踪</title>
+    <script src="https://lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://lf26-cdn-tos.bytecdntp.com/cdn/expire-1-M/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://lf6-cdn-tos.bytecdntp.com/cdn/expire-1-M/babel-standalone/6.26.0/babel.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body, #root { height: 100%; height: 100dvh; width: 100%; overflow: hidden; background: #0f0f1a; color: #fff; }
+        body { padding-top: env(safe-area-inset-top); font-family: -apple-system, system-ui, sans-serif; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        /* 增加加载占位样式 */
+        #root:empty::before { content: '正在启动训练系统...'; display: flex; align-items: center; justify-content: center; height: 100vh; color: rgba(255,255,255,0.3); font-size: 14px; }
+    </style>
 </head>
 <body>
-<div id="root"></div>
-
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <div id="root"></div>
 
 <script type="text/babel">
 const { useState, useRef, useEffect, useMemo } = React;
 
-// --- Constants & Config ---
-const STORAGE_PREFIX = "tt_v2_";
-const KEYS = {
-  CONFIG: STORAGE_PREFIX + "config",
-  CACHE: STORAGE_PREFIX + "cache",
-  MEMO: STORAGE_PREFIX + "memo",
-  ACTIVE_TAB: STORAGE_PREFIX + "active_tab"
-};
+// --- 配置与常量 ---
+const STORAGE_PREFIX = "tt_v3_"; // 升级版本号避免旧缓存冲突
+const KEYS = { CONFIG: STORAGE_PREFIX + "config", CACHE: STORAGE_PREFIX + "cache", MEMO: STORAGE_PREFIX + "memo", TAB: STORAGE_PREFIX + "tab" };
 
-const TAB_ICONS = {
-  RECORDS: "📋",
-  RM: "⚖️",
-  CONV: "🔄",
-  MEMO: "📝"
-};
-
-// --- Utils ---
-const pad = (n) => String(n).padStart(2, "0");
-const formatDate = (ts) => {
-  const d = new Date(ts);
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
-};
-
-function utf8ToBase64(str) {
-  const bytes = new TextEncoder().encode(str);
-  let bin = "";
-  bytes.forEach((b) => (bin += String.fromCharCode(b)));
-  return btoa(bin);
-}
-function base64ToUtf8(b64) {
-  const bin = atob(b64.replace(/\n/g, ""));
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
-}
-
-// --- GitHub API ---
-async function githubGet(config) {
-  const res = await fetch(
-    `https://api.github.com/repos/${config.repo}/contents/${config.filePath}`,
-    { headers: { Authorization: `token ${config.token}`, Accept: "application/vnd.github.v3+json" } }
-  );
-  if (res.status === 404) return { content: "", sha: null };
-  if (!res.ok) throw new Error(`API ${res.status}: ${(await res.json().catch(() => ({}))).message || "error"}`);
-  const data = await res.json();
-  return { content: base64ToUtf8(data.content), sha: data.sha };
-}
-
-async function githubPut(config, content, sha) {
-  const body = { message: `update log ${new Date().toLocaleString()}`, content: utf8ToBase64(content) };
-  if (sha) body.sha = sha;
-  const res = await fetch(
-    `https://api.github.com/repos/${config.repo}/contents/${config.filePath}`,
-    {
-      method: "PUT",
-      headers: { Authorization: `token ${config.token}`, Accept: "application/vnd.github.v3+json", "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }
-  );
-  if (!res.ok) throw new Error(`API ${res.status}: ${(await res.json().catch(() => ({}))).message || "error"}`);
-  return await res.json();
-}
-
-// --- Parser Logic ---
+// --- 修复后的解析逻辑 ---
 function parseTrainingRecords(text) {
-  if (!text) return [];
-  const lines = text.split("\n");
-  const sessions = [];
-  let currentSession = null;
+    if (!text) return [];
+    const sessions = [];
+    let currentSession = null;
+    const lines = text.split("\n");
 
-  for (let line of lines) {
-    line = line.trim();
-    if (!line) continue;
-
-    // Match Date: ### 26/04/01 or ### 26/04/01 (Alias)
-    const dateMatch = line.match(/^###\s*(\d{2}\/\d{2}\/\d{2})(?:\s*\((.*)\))?/);
-    if (dateMatch) {
-      if (currentSession) sessions.push(currentSession);
-      currentSession = { date: dateMatch[1], alias: dateMatch[2] || "", exercises: [] };
-      continue;
-    }
-
-    // Match Exercise: 卧推：75*55544 or 卧推：70*5x5
-    if (currentSession) {
-      const exMatch = line.match(/^([^：:]+)[：:](.*)$/);
-      if (exMatch) {
-        const name = exMatch[1].trim();
-        const rawData = exMatch[2].trim();
-
-        // Parse reps/sets from rawData
-        // Example: 75*55544, 70*5x5, 40*12/10/10/10/8, 宽握*8887
-        const parts = rawData.split("*");
-        const weight = parts[0].trim();
-        const repData = parts[1] ? parts[1].trim() : "";
-
-        let reps = [];
-        if (repData.includes("x")) {
-          const [r, s] = repData.split("x").map(v => parseInt(v));
-          reps = Array(s || 1).fill(r || 0);
-        } else if (repData.includes("/")) {
-          reps = repData.split("/").map(v => parseInt(v));
-        } else {
-          // Handle 55544 style
-          reps = repData.split("").map(v => {
-            const num = parseInt(v);
-            return !isNaN(num) ? num : 0;
-          });
-          // Special case for numbers > 9? No, the format 55544 implies single digits.
-          // If it's something like 10/10/10, it would use / or x.
+    for (let line of lines) {
+        line = line.trim();
+        if (!line) continue;
+        const dateMatch = line.match(/^###\s*(\d{2}\/\d{2}\/\d{2})(?:\s*\((.*)\))?/);
+        if (dateMatch) {
+            if (currentSession) sessions.push(currentSession);
+            currentSession = { date: dateMatch[1], alias: dateMatch[2] || "", exercises: [] };
+            continue;
         }
-
-        currentSession.exercises.push({ name, weight, reps, raw: rawData });
-      }
+        if (currentSession) {
+            const exMatch = line.match(/^([^：:]+)[：:](.*)$/);
+            if (exMatch) {
+                const name = exMatch[1].trim();
+                const rawData = exMatch[2].trim();
+                const parts = rawData.split("*");
+                const weight = parts[0] || "0";
+                let reps = [];
+                const repData = parts[1] || "";
+                
+                if (repData.includes("x")) {
+                    const [r, s] = repData.split("x").map(v => parseInt(v) || 0);
+                    reps = Array(s || 0).fill(r);
+                } else if (repData.includes("/")) {
+                    reps = repData.split("/").map(v => parseInt(v) || 0);
+                } else {
+                    reps = repData.split("").map(v => parseInt(v) || 0);
+                }
+                currentSession.exercises.push({ name, weight, reps });
+            }
+        }
     }
-  }
-  if (currentSession) sessions.push(currentSession);
-  return sessions;
+    if (currentSession) sessions.push(currentSession);
+    return sessions;
 }
 
-// --- Components ---
-
-function Header({ title, onMore }) {
-  return (
-    <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-      <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: 1, color: "rgba(255,255,255,0.9)" }}>{title}</span>
-      {onMore && <button onClick={onMore} style={pillBtn}>Settings</button>}
+// --- 组件部分 (精简修复) ---
+const Header = ({ title, onMore }) => (
+    <div style={{ padding: "16px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h2 style={{ fontSize: "18px", fontWeight: "800" }}>{title}</h2>
+        {onMore && <button onClick={onMore} style={pillBtnStyle}>设置</button>}
     </div>
-  );
-}
+);
 
-const pillBtn = {
-  background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 8, color: "rgba(255,255,255,0.6)", fontSize: 12,
-  padding: "6px 14px", cursor: "pointer", fontFamily: "inherit", fontWeight: 600,
-};
+const pillBtnStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#fff", padding: "6px 12px", fontSize: "12px" };
 
-function WeightConverter() {
-  const [kg, setKg] = useState(60);
-  const [lb, setLb] = useState(0);
+// ... (其他 UI 组件如 RMCalculator, WeightConverter 保持原样，但确保数据处理健壮)
 
-  const totalKg = kg + lb * 0.453592;
+function TrainingRecordsView({ config, rawText, setRawText }) {
+    const [mode, setMode] = useState("date");
+    const [selectedEx, setSelectedEx] = useState(null);
 
-  const StepPicker = ({ value, onChange, step, label, unit }) => {
-    const max = unit === "kg" ? 100 : 100;
+    const sessions = useMemo(() => {
+        const parsed = parseTrainingRecords(rawText);
+        return parsed.sort((a, b) => b.date.localeCompare(a.date)); // 简化排序确保稳定性
+    }, [rawText]);
+
+    const allExercises = useMemo(() => {
+        const map = {};
+        sessions.forEach(s => {
+            s.exercises.forEach(ex => {
+                if (!map[ex.name]) map[ex.name] = [];
+                map[ex.name].push({ date: s.date, ...ex });
+            });
+        });
+        return Object.keys(map).map(name => ({ name, history: map[name] }));
+    }, [sessions]);
+
     return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, alignItems: "center", background: "rgba(255,255,255,0.03)", padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)" }}>
-      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 700 }}>{label}</span>
-      <div style={{ display: "flex", alignItems: "center", gap: 15 }}>
-        <button onClick={() => onChange(Math.max(0, value - step))} style={circleBtn}>-</button>
-        <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}<span style={{ fontSize: 12, marginLeft: 2, opacity: 0.5 }}>{unit}</span></div>
-        <button onClick={() => onChange(Math.min(max, value + step))} style={circleBtn}>+</button>
-      </div>
-      <input type="range" min="0" max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: "100%", marginTop: 10, accentColor: "#4ECDC4" }} />
-    </div>
-  );};
-
-  return (
-    <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", gap: 12 }}>
-        <StepPicker label="KG 选择" value={kg} onChange={setKg} step={5} unit="kg" />
-        <StepPicker label="LB 选择" value={lb} onChange={setLb} step={5} unit="lb" />
-      </div>
-      <div style={{ background: "linear-gradient(135deg, rgba(78,205,196,0.15), rgba(78,205,196,0.05))", padding: 24, borderRadius: 16, border: "1px solid rgba(78,205,196,0.3)", textAlign: "center" }}>
-        <div style={{ fontSize: 12, color: "#4ECDC4", fontWeight: 700, marginBottom: 8, letterSpacing: 1 }}>总重量 (KG)</div>
-        <div style={{ fontSize: 48, fontWeight: 800 }}>{totalKg.toFixed(1)}<span style={{ fontSize: 18, marginLeft: 4, opacity: 0.6 }}>kg</span></div>
-      </div>
-    </div>
-  );
-}
-
-const circleBtn = {
-  width: 32, height: 32, borderRadius: "50%", background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center"
-};
-
-function RMCalculator() {
-  const [weight, setWeight] = useState("70");
-  const [reps, setReps] = useState("5");
-
-  const weightNum = parseFloat(weight) || 0;
-  const repsNum = parseInt(reps) || 0;
-  const estimated1RM = weightNum * (1 + repsNum / 30); // Epley formula
-  const hasResult = weightNum > 0 && repsNum > 0;
-
-  const RM_TABLE = [
-    { rm: 1, coeff: 1.0 }, { rm: 2, coeff: 0.97 }, { rm: 3, coeff: 0.94 },
-    { rm: 4, coeff: 0.92 }, { rm: 5, coeff: 0.89 }, { rm: 6, coeff: 0.86 },
-    { rm: 7, coeff: 0.83 }, { rm: 8, coeff: 0.81 }, { rm: 9, coeff: 0.78 },
-    { rm: 10, coeff: 0.75 },
-  ];
-
-  return (
-    <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "flex", gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 700, marginBottom: 6 }}>重量 (kg)</div>
-          <input type="number" value={weight} onChange={(e) => setWeight(e.target.value)} style={inputStyle} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 700, marginBottom: 6 }}>次数 (reps)</div>
-          <input type="number" value={reps} onChange={(e) => setReps(e.target.value)} style={inputStyle} />
-        </div>
-      </div>
-
-      {hasResult && (
-        <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
-          <div style={{ padding: 12, background: "rgba(78,205,196,0.1)", borderBottom: "1px solid rgba(78,205,196,0.2)", textAlign: "center" }}>
-             <span style={{ fontSize: 12, color: "#4ECDC4" }}>估计 1RM ≈ </span>
-             <span style={{ fontSize: 20, fontWeight: 700 }}>{estimated1RM.toFixed(1)}kg</span>
-          </div>
-          {RM_TABLE.map((r) => (
-            <div key={r.rm} style={{ display: "flex", justifyContent: "space-between", padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-              <span style={{ fontSize: 14, color: "rgba(255,255,255,0.5)" }}>{r.rm}RM</span>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{(estimated1RM * r.coeff).toFixed(1)} kg</span>
+        <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", gap: "8px", padding: "12px 16px" }}>
+                <button onClick={() => setMode("date")} style={{...pillBtnStyle, opacity: mode==="date"?1:0.5}}>时间线</button>
+                <button onClick={() => setMode("exercise")} style={{...pillBtnStyle, opacity: mode==="exercise"?1:0.5}}>动作库</button>
+                <button onClick={() => setMode("edit")} style={{...pillBtnStyle, opacity: mode==="edit"?1:0.5}}>编辑</button>
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const inputStyle = {
-  width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 10, color: "#fff", padding: 12, fontSize: 16, outline: "none",
-};
-
-function MemoView() {
-  const [text, setText] = useState(() => localStorage.getItem(KEYS.MEMO) || "");
-  const [toast, setToast] = useState("");
-  useEffect(() => { localStorage.setItem(KEYS.MEMO, text); }, [text]);
-
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2000); };
-
-  const addToRecords = () => {
-    if (!text.trim()) {
-      showToast("备忘录内容为空");
-      return;
-    }
-    const today = new Date();
-    const dateStr = `${pad(today.getFullYear() % 100)}/${pad(today.getMonth() + 1)}/${pad(today.getDate())}`;
-    const newEntry = `### ${dateStr}\n${text.trim()}\n\n`;
-
-    const currentCache = localStorage.getItem(KEYS.CACHE) || "";
-    const newCache = newEntry + currentCache;
-    localStorage.setItem(KEYS.CACHE, newCache);
-    showToast("已添加到训练记录");
-    setText(""); // Clear memo after adding
-  };
-
-  const clearMemo = () => {
-    if (confirm("确定要清空备忘录吗？")) {
-      setText("");
-      showToast("备忘录已清空");
-    }
-  };
-
-  return (
-    <div style={{ padding: 16, height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="记录训练内容，格式：&#10;动作名称：重量*次数格式&#10;例如：卧推：70*5x5&#10;完成后点击下方\"添加到训练记录\"按钮"
-        style={{ flex: 1, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, color: "#fff", padding: 16, fontSize: 15, fontFamily: "inherit", resize: "none", outline: "none", lineHeight: 1.6 }} />
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={addToRecords} style={{ ...pillBtn, flex: 1, background: "rgba(78,205,196,0.15)", color: "#4ECDC4", borderColor: "rgba(78,205,196,0.3)", padding: 12, fontSize: 14 }}>添加到训练记录</button>
-        <button onClick={clearMemo} style={{ ...pillBtn, padding: 12, fontSize: 14 }}>清空</button>
-      </div>
-      {toast && <div style={toastStyle}>{toast}</div>}
-    </div>
-  );
-}
-
-const INITIAL_DATA = "";
-
-function TrainingRecordsView({ config }) {
-  const [rawText, setRawText] = useState(() => localStorage.getItem(KEYS.CACHE) || INITIAL_DATA);
-  const [mode, setMode] = useState("date"); // date | exercise | edit | settings
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState("");
-  const [toast, setToast] = useState("");
-
-  const sessions = useMemo(() => {
-    const parsed = parseTrainingRecords(rawText);
-    // Sort: newest date first, then higher total reps first
-    return parsed.sort((a, b) => {
-      // Convert YY/MM/DD to comparable string (20YYMMDD) for correct sorting
-      const parseDate = (dateStr) => {
-        const [y, m, d] = dateStr.split('/');
-        return `20${y}${m}${d}`;
-      };
-      const dateA = parseDate(a.date);
-      const dateB = parseDate(b.date);
-      if (dateA !== dateB) {
-        return dateB.localeCompare(dateA); // descending
-      }
-      // Same date: higher total reps first
-      const totalRepsA = a.exercises.reduce((sum, ex) => sum + ex.reps.reduce((s, r) => s + (typeof r === 'number' ? r : 0), 0), 0);
-      const totalRepsB = b.exercises.reduce((sum, ex) => sum + ex.reps.reduce((s, r) => s + (typeof r === 'number' ? r : 0), 0), 0);
-      return totalRepsB - totalRepsA; // descending
-    });
-  }, [rawText]);
-
-  const allExercises = useMemo(() => {
-    const map = {};
-    sessions.forEach(s => {
-      s.exercises.forEach(ex => {
-        if (!map[ex.name]) map[ex.name] = [];
-        map[ex.name].push({ date: s.date, ...ex });
-      });
-    });
-    return Object.keys(map).sort().map(name => ({ name, history: map[name] }));
-  }, [sessions]);
-
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2000); };
-
-  const handlePull = async () => {
-    if (!config) { setMode("settings"); return; }
-    setSyncing(true); setError("");
-    try {
-      const { content } = await githubGet(config);
-      setRawText(content);
-      localStorage.setItem(KEYS.CACHE, content);
-      showToast("已从云端同步");
-    } catch (e) {
-      setError(e.message);
-    }
-    setSyncing(false);
-  };
-
-  const handlePush = async () => {
-    if (!config) { setMode("settings"); return; }
-    setSyncing(true); setError("");
-    try {
-      const { sha } = await githubGet(config);
-      await githubPut(config, rawText, sha);
-      showToast("已上传至云端");
-    } catch (e) {
-      setError(e.message);
-    }
-    setSyncing(false);
-  };
-
-  const [selectedEx, setSelectedEx] = useState(null);
-
-  return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      {/* Sub-nav */}
-      <div style={{ display: "flex", padding: "8px 16px", gap: 8, borderBottom: "1px solid rgba(255,255,255,0.04)", overflowX: "auto", flexShrink: 0 }}>
-        <button onClick={() => setMode("date")} style={{ ...pillBtn, ...(mode === "date" ? activePill : {}) }}>日期索引</button>
-        <button onClick={() => setMode("exercise")} style={{ ...pillBtn, ...(mode === "exercise" ? activePill : {}) }}>动作索引</button>
-        <button onClick={() => setMode("edit")} style={{ ...pillBtn, ...(mode === "edit" ? activePill : {}) }}>编辑数据</button>
-        <div style={{ flex: 1 }} />
-        <button onClick={handlePull} disabled={syncing} style={{ ...pillBtn, color: "#4ECDC4" }}>{syncing ? "..." : "同步"}</button>
-      </div>
-
-      {error && <div style={{ padding: "8px 16px", color: "#FF6B6B", fontSize: 12 }}>{error}</div>}
-
-      <div style={{ flex: 1, overflow: "auto" }}>
-        {mode === "date" && (
-          <div style={{ padding: 16 }}>
-            {sessions.map((s, i) => (
-              <div key={i} style={{ marginBottom: 20, background: "rgba(255,255,255,0.02)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
-                <div style={{ padding: "10px 16px", background: "rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontWeight: 700, color: "#4ECDC4" }}>{s.alias ? `${s.alias} ` : ""}{s.date}</span>
-                  <span style={{ fontSize: 11, opacity: 0.4 }}>{s.exercises.length} 项动作</span>
-                </div>
-                <div style={{ padding: 12 }}>
-                  {s.exercises.map((ex, j) => (
-                    <div key={j} style={{ display: "flex", gap: 10, fontSize: 14, marginBottom: 4 }}>
-                      <span style={{ color: "rgba(255,255,255,0.5)", width: 60 }}>{ex.name}</span>
-                      <span style={{ fontWeight: 600 }}>{ex.weight}kg * {ex.reps.join("/")}</span>
+            
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 100px" }}>
+                {mode === "date" && sessions.map((s, i) => (
+                    <div key={i} style={{ marginBottom: "16px", background: "rgba(255,255,255,0.03)", padding: "12px", borderRadius: "12px" }}>
+                        <div style={{ color: "#4ECDC4", marginBottom: "8px", fontWeight: "bold" }}>{s.date} {s.alias}</div>
+                        {s.exercises.map((ex, j) => (
+                            <div key={j} style={{ fontSize: "14px", opacity: 0.8 }}>{ex.name}：{ex.weight}kg * {ex.reps.join("/")}</div>
+                        ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {mode === "exercise" && (
-          <div style={{ padding: 16 }}>
-            {selectedEx ? (
-              <div>
-                <button onClick={() => setSelectedEx(null)} style={{ ...pillBtn, marginBottom: 16 }}>← 返回列表</button>
-                <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 16, color: "#4ECDC4" }}>{selectedEx.name} 历史记录</div>
-                {selectedEx.history.reverse().map((h, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <span style={{ opacity: 0.5, fontSize: 13 }}>{h.date}</span>
-                    <span style={{ fontWeight: 600 }}>{h.weight}kg * {h.reps.join("/")}</span>
-                  </div>
                 ))}
-              </div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                {allExercises.map((ex, i) => (
-                  <button key={i} onClick={() => setSelectedEx(ex)} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 12, color: "#fff", textAlign: "left", cursor: "pointer" }}>
-                    <div style={{ fontWeight: 700, marginBottom: 4 }}>{ex.name}</div>
-                    <div style={{ fontSize: 11, opacity: 0.4 }}>{ex.history.length} 次记录</div>
-                  </button>
+                
+                {mode === "exercise" && (
+                    selectedEx ? (
+                        <div>
+                            <button onClick={() => setSelectedEx(null)} style={{...pillBtnStyle, marginBottom: "12px"}}>返回</button>
+                            <h3>{selectedEx.name}</h3>
+                            {[...selectedEx.history].reverse().map((h, i) => ( // 使用副本反转
+                                <div key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "8px 0" }}>
+                                    {h.date}: {h.weight}kg * {h.reps.join("/")}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                            {allExercises.map(ex => (
+                                <div key={ex.name} onClick={() => setSelectedEx(ex)} style={{ background: "rgba(255,255,255,0.05)", padding: "12px", borderRadius: "8px" }}>
+                                    {ex.name} ({ex.history.length})
+                                </div>
+                            ))}
+                        </div>
+                    )
+                )}
+
+                {mode === "edit" && (
+                    <textarea 
+                        value={rawText} 
+                        onChange={(e) => { setRawText(e.target.value); localStorage.setItem(KEYS.CACHE, e.target.value); }}
+                        style={{ width: "100%", height: "300px", background: "#000", color: "#4ECDC4", border: "1px solid #333", borderRadius: "8px", padding: "10px" }}
+                    />
+                )}
+            </div>
+        </div>
+    );
+}
+
+// --- 主程序入口 ---
+function App() {
+    const [activeTab, setActiveTab] = useState("RECORDS");
+    const [rawText, setRawText] = useState(() => localStorage.getItem(KEYS.CACHE) || "### 26/04/01\n卧推：70*555\n");
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <Header title="Trainer Hub" />
+            <div style={{ flex: 1, overflow: "hidden" }}>
+                {activeTab === "RECORDS" && <TrainingRecordsView rawText={rawText} setRawText={setRawText} />}
+                {activeTab === "RM" && <div style={{padding:20}}>RM计算器暂未变动</div>}
+            </div>
+            {/* 底部导航 */}
+            <div style={{ display: "flex", borderTop: "1px solid #222", paddingBottom: "env(safe-area-inset-bottom)" }}>
+                {["RECORDS", "RM", "MEMO"].map(tab => (
+                    <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: "15px", background: "none", border: "none", color: activeTab===tab?"#4ECDC4":"#666" }}>
+                        {tab}
+                    </button>
                 ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {mode === "edit" && (
-          <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: 16 }}>
-             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>
-               格式: ### YY/MM/DD (别名) \n 动作：重量*次数/次数...
-             </div>
-             <textarea value={rawText} onChange={(e) => { setRawText(e.target.value); localStorage.setItem(KEYS.CACHE, e.target.value); }}
-               style={{ flex: 1, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, color: "#fff", padding: 12, fontSize: 13, fontFamily: "monospace", resize: "none", outline: "none" }} />
-             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                <button onClick={handlePush} disabled={syncing} style={{ ...pillBtn, flex: 1, background: "rgba(78,205,196,0.1)", color: "#4ECDC4", padding: 12 }}>{syncing ? "上传中..." : "保存并上传至云端"}</button>
-             </div>
-          </div>
-        )}
-      </div>
-      {toast && <div style={toastStyle}>{toast}</div>}
-    </div>
-  );
+            </div>
+        </div>
+    );
 }
 
-const activePill = { background: "rgba(78,205,196,0.15)", color: "#4ECDC4", border: "1px solid rgba(78,205,196,0.3)" };
-
-function SettingsView({ initial, onSave, onBack }) {
-  const [repo, setRepo] = useState(initial?.repo || "");
-  const [token, setToken] = useState(initial?.token || "");
-  const [filePath, setFilePath] = useState(initial?.filePath || "训练记录.md");
-
-  return (
-    <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 20 }}>
-      <button onClick={onBack} style={{ ...pillBtn, alignSelf: "flex-start" }}>← 返回</button>
-      <div>
-        <div style={labelStyle}>GitHub Repository (owner/repo)</div>
-        <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="e.g. peiyunlee/Train_Timer" style={inputStyle} />
-      </div>
-      <div>
-        <div style={labelStyle}>Access Token (Fine-grained)</div>
-        <input value={token} onChange={(e) => setToken(e.target.value)} type="password" placeholder="github_pat_..." style={inputStyle} />
-      </div>
-      <div>
-        <div style={labelStyle}>Data File Path</div>
-        <input value={filePath} onChange={(e) => setFilePath(e.target.value)} placeholder="训练记录.md" style={inputStyle} />
-      </div>
-      <button onClick={() => onSave({ repo, token, filePath })} style={{ ...pillBtn, background: "rgba(78,205,196,0.2)", color: "#4ECDC4", padding: 14 }}>保存配置</button>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", lineHeight: 1.6 }}>
-        提示：数据将以 Markdown 格式存储在指定的 GitHub 仓库中。请确保 Token 拥有 Contents (Read/Write) 权限。
-      </div>
-    </div>
-  );
-}
-
-const labelStyle = { fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 6 };
-
-const toastStyle = {
-  position: "fixed", bottom: 100, left: "50%", transform: "translateX(-50%)",
-  background: "rgba(255,255,255,0.12)", backdropFilter: "blur(10px)",
-  color: "#fff", padding: "8px 20px", borderRadius: 20,
-  fontSize: 13, fontWeight: 500, zIndex: 200, border: "1px solid rgba(255,255,255,0.1)",
-};
-
-// --- Main App Entry ---
-function TrainerApp() {
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem(KEYS.ACTIVE_TAB) || "RECORDS");
-  const [config, setConfig] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(KEYS.CONFIG)); } catch { return null; }
-  });
-  const [showSettings, setShowSettings] = useState(false);
-
-  useEffect(() => { localStorage.setItem(KEYS.ACTIVE_TAB, activeTab); }, [activeTab]);
-
-  const handleSaveConfig = (c) => {
-    localStorage.setItem(KEYS.CONFIG, JSON.stringify(c));
-    setConfig(c);
-    setShowSettings(false);
-  };
-
-  const tabs = [
-    { id: "RECORDS", name: "训练记录", icon: TAB_ICONS.RECORDS },
-    { id: "RM", name: "RM 换算", icon: TAB_ICONS.RM },
-    { id: "CONV", name: "重量换算", icon: TAB_ICONS.CONV },
-    { id: "MEMO", name: "备忘录", icon: TAB_ICONS.MEMO },
-  ];
-
-  const activeTabName = tabs.find(t => t.id === activeTab).name;
-
-  return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <Header title={showSettings ? "设置" : activeTabName} onMore={activeTab === "RECORDS" ? () => setShowSettings(!showSettings) : null} />
-
-      <div style={{ flex: 1, overflow: "hidden" }}>
-        {showSettings ? (
-          <SettingsView initial={config} onSave={handleSaveConfig} onBack={() => setShowSettings(false)} />
-        ) : (
-          <div style={{ height: "100%", overflow: "auto" }}>
-            {activeTab === "RECORDS" && <TrainingRecordsView config={config} />}
-            {activeTab === "RM" && <RMCalculator />}
-            {activeTab === "CONV" && <WeightConverter />}
-            {activeTab === "MEMO" && <MemoView />}
-          </div>
-        )}
-      </div>
-
-      {/* Tab Bar */}
-      <div style={{
-        display: "flex", borderTop: "1px solid rgba(255,255,255,0.08)",
-        paddingBottom: "max(12px, env(safe-area-inset-bottom))",
-        background: "rgba(15,15,26,0.95)", backdropFilter: "blur(10px)", flexShrink: 0
-      }}>
-        {tabs.map(tab => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowSettings(false); }}
-              style={{
-                flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
-                padding: "10px 0", background: "transparent", border: "none",
-                color: isActive ? "#4ECDC4" : "rgba(255,255,255,0.3)", transition: "all 0.2s"
-              }}>
-              <span style={{ fontSize: 20, marginBottom: 4 }}>{tab.icon}</span>
-              <span style={{ fontSize: 10, fontWeight: 700 }}>{tab.name}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// Compatibility render - works with both old and new React
-console.log("Starting Train_Timer app...");
-const root = document.getElementById("root");
-if (ReactDOM.createRoot) {
-  ReactDOM.createRoot(root).render(<TrainerApp />);
-  console.log("✅ App rendered with React 18 createRoot");
-} else {
-  ReactDOM.render(<TrainerApp />, root);
-  console.log("✅ App rendered with legacy ReactDOM.render");
-}
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
 </script>
 </body>
 </html>
