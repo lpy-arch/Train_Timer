@@ -12,28 +12,11 @@
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body, #root { height: 100%; height: 100dvh; width: 100%; overflow: hidden; background: #0f0f1a; color: #fff; }
   body { padding-top: env(safe-area-inset-top); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; }
-  
+
   /* Scrollbar styling */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); borderRadius: 10px; }
-
-  /* Utilities */
-  .flex-col { display: flex; flexDirection: column; }
-  .flex-row { display: flex; flexDirection: row; }
-  .items-center { alignItems: center; }
-  .justify-between { justifyContent: space-between; }
-  .overflow-auto { overflow: auto; }
-  .p-16 { padding: 16px; }
-  .gap-8 { gap: 8px; }
-  .text-xs { fontSize: 12px; }
-  .text-sm { fontSize: 14px; }
-  .font-bold { fontWeight: 700; }
-  .opacity-50 { opacity: 0.5; }
-
-  /* Transitions */
-  .fade-enter { opacity: 0; }
-  .fade-enter-active { opacity: 1; transition: opacity 0.2s; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
 </style>
 </head>
 <body>
@@ -43,7 +26,7 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-<script type="text/babel" data-type="module">
+<script type="text/babel">
 const { useState, useRef, useEffect, useMemo } = React;
 
 // --- Constants & Config ---
@@ -134,13 +117,13 @@ function parseTrainingRecords(text) {
       if (exMatch) {
         const name = exMatch[1].trim();
         const rawData = exMatch[2].trim();
-        
+
         // Parse reps/sets from rawData
         // Example: 75*55544, 70*5x5, 40*12/10/10/10/8, 宽握*8887
         const parts = rawData.split("*");
         const weight = parts[0].trim();
         const repData = parts[1] ? parts[1].trim() : "";
-        
+
         let reps = [];
         if (repData.includes("x")) {
           const [r, s] = repData.split("x").map(v => parseInt(v));
@@ -149,11 +132,14 @@ function parseTrainingRecords(text) {
           reps = repData.split("/").map(v => parseInt(v));
         } else {
           // Handle 55544 style
-          reps = repData.split("").map(v => parseInt(v) || v);
+          reps = repData.split("").map(v => {
+            const num = parseInt(v);
+            return !isNaN(num) ? num : 0;
+          });
           // Special case for numbers > 9? No, the format 55544 implies single digits.
           // If it's something like 10/10/10, it would use / or x.
         }
-        
+
         currentSession.exercises.push({ name, weight, reps, raw: rawData });
       }
     }
@@ -245,7 +231,7 @@ function RMCalculator() {
           <input type="number" value={reps} onChange={(e) => setReps(e.target.value)} style={inputStyle} />
         </div>
       </div>
-      
+
       {hasResult && (
         <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
           <div style={{ padding: 12, background: "rgba(78,205,196,0.1)", borderBottom: "1px solid rgba(78,205,196,0.2)", textAlign: "center" }}>
@@ -301,7 +287,7 @@ function MemoView() {
 
   return (
     <div style={{ padding: 16, height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="记录训练内容，格式：&#10;动作名称：重量*次数格式&#10;例如：卧推：70*5x5&#10;完成后点击下方"添加到训练记录"按钮"
+      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="记录训练内容，格式：&#10;动作名称：重量*次数格式&#10;例如：卧推：70*5x5&#10;完成后点击下方\"添加到训练记录\"按钮"
         style={{ flex: 1, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, color: "#fff", padding: 16, fontSize: 15, fontFamily: "inherit", resize: "none", outline: "none", lineHeight: 1.6 }} />
       <div style={{ display: "flex", gap: 8 }}>
         <button onClick={addToRecords} style={{ ...pillBtn, flex: 1, background: "rgba(78,205,196,0.15)", color: "#4ECDC4", borderColor: "rgba(78,205,196,0.3)", padding: 12, fontSize: 14 }}>添加到训练记录</button>
@@ -312,9 +298,9 @@ function MemoView() {
   );
 }
 
-const INITIAL_DATA = ``;
+const INITIAL_DATA = "";
 
-function TrainingRecordsView({ config, setView }) {
+function TrainingRecordsView({ config }) {
   const [rawText, setRawText] = useState(() => localStorage.getItem(KEYS.CACHE) || INITIAL_DATA);
   const [mode, setMode] = useState("date"); // date | exercise | edit | settings
   const [syncing, setSyncing] = useState(false);
@@ -336,8 +322,8 @@ function TrainingRecordsView({ config, setView }) {
         return dateB.localeCompare(dateA); // descending
       }
       // Same date: higher total reps first
-      const totalRepsA = a.exercises.reduce((sum, ex) => sum + ex.reps.reduce((s, r) => s + r, 0), 0);
-      const totalRepsB = b.exercises.reduce((sum, ex) => sum + ex.reps.reduce((s, r) => s + r, 0), 0);
+      const totalRepsA = a.exercises.reduce((sum, ex) => sum + ex.reps.reduce((s, r) => s + (typeof r === 'number' ? r : 0), 0), 0);
+      const totalRepsB = b.exercises.reduce((sum, ex) => sum + ex.reps.reduce((s, r) => s + (typeof r === 'number' ? r : 0), 0), 0);
       return totalRepsB - totalRepsA; // descending
     });
   }, [rawText]);
@@ -530,7 +516,7 @@ function TrainerApp() {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <Header title={showSettings ? "设置" : activeTabName} onMore={activeTab === "RECORDS" ? () => setShowSettings(!showSettings) : null} />
-      
+
       <div style={{ flex: 1, overflow: "hidden" }}>
         {showSettings ? (
           <SettingsView initial={config} onSave={handleSaveConfig} onBack={() => setShowSettings(false)} />
@@ -569,7 +555,16 @@ function TrainerApp() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<TrainerApp />);
+// Compatibility render - works with both old and new React
+console.log("Starting Train_Timer app...");
+const root = document.getElementById("root");
+if (ReactDOM.createRoot) {
+  ReactDOM.createRoot(root).render(<TrainerApp />);
+  console.log("✅ App rendered with React 18 createRoot");
+} else {
+  ReactDOM.render(<TrainerApp />, root);
+  console.log("✅ App rendered with legacy ReactDOM.render");
+}
 </script>
 </body>
 </html>
